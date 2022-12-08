@@ -50,8 +50,12 @@
 
           return false;
         };
+
         if (window["WebSocket"]) {
-          conn = new WebSocket("ws://" + document.location.host + "/ws");
+          //conn = new WebSocket("ws://" + document.location.host + "/ws");
+          //conn = new WebSocket("ws://localhost:3000/ws");
+          conn = new WebSocket("ws://192.168.0.49:3000/ws");
+          //conn = new WebSocket("ws://127.0.0.1:3000/ws");
           conn.onclose = function (evt) {
             var item = document.createElement("div");
             item.innerHTML = "<b>Connection closed.</b>";

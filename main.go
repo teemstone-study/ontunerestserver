@@ -44,7 +44,9 @@ func main() {
 	mux := app.MakeHandler(env.GetDBConnString(), &ch, clientRoom)
 	defer mux.Close() //finally 개념
 
-	conn, err := net.Dial("tcp", "192.168.0.140:8088")	 	
+	
+	//conn, err := net.Dial("tcp", "192.168.0.140:8088")	 	
+	conn, err := net.Dial("tcp", env.GetManagerConnString())	 	
 	if err != nil {
 		fmt.Println("Faield to Dial : ", err)
 	}
@@ -95,7 +97,7 @@ func readHandler(conn net.Conn, dQ *data.DataQueue) {
 			return
 		}
 		if 0 < n {
-			fmt.Printf("%d\n", header)
+			fmt.Printf("header %d\n", header)
 
 			recv := make([]byte, header[0])
 		n, err = conn.Read(recv)
@@ -109,9 +111,7 @@ func readHandler(conn net.Conn, dQ *data.DataQueue) {
 			if 0 < n {
 				str_data := recv[:n]
 				fmt.Printf("%s\n", str_data)
-				fmt.Println("---")
-
-				
+				// fmt.Println("---")				
 				//dQ.DataChan <- message
 				//fmt.Println(message)
 				databuf := types.RealData{}

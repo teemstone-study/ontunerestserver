@@ -15,6 +15,7 @@ type DBInfo struct {
 	pwd    string
 	dbname string
 	wPort  string
+	mIPPort string	
 }
 
 // Rectangle 를 반환하는 함수를 만들었다.
@@ -39,6 +40,7 @@ func (db *DBInfo) loadDBConf(envfilepath string) {
 	db.pwd = os.Getenv("DBPwd")
 	db.dbname = os.Getenv("DBName")
 	db.wPort = os.Getenv("WPort")
+	db.mIPPort = os.Getenv("MIPPort")
 
 	log.Println(db.GetDBConnString())
 }
@@ -50,4 +52,8 @@ func (db *DBInfo) GetDBConnString() string {
 
 func (db *DBInfo) GetWPort() string {
 	return db.wPort
+}
+
+func (db *DBInfo) GetManagerConnString() string {
+	return db.mIPPort
 }
