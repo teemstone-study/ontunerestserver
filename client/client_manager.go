@@ -50,7 +50,7 @@ func (w *ClientRoom) dataPump(dQ *types.Queue) { //code uint32,
 		w.broadcast <- data
 		// cMapMutex.RLock()
 		// for client := range w.clientMap {		
-		// 	client.send <- data
+		// 	client. <- data
 		// }		
 		// cMapMutex.RUnlock()		
 	}
