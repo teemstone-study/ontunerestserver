@@ -20,10 +20,10 @@ var rd *render.Render = render.New()
 type AppHandler struct {
 	//handler http.Handler
 	http.Handler
-	db     data.DBHandler
-	chdata *chan string
+	db         data.DBHandler
+	chdata     *chan string
 	clientRoom *client.ClientRoom
-	id uint64
+	id         uint64
 }
 
 type Success struct {
@@ -67,14 +67,14 @@ func (a *AppHandler) GetPageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *AppHandler) wsHandler(w http.ResponseWriter, r *http.Request) {
-	conn, err := client.Upgrader.Upgrade(w, r, nil)		
+	conn, err := client.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	a.id ++
+	a.id++
 	client := client.NewClient(a.id, a.clientRoom, conn) //Client conn 을 가지는 Clinet 생성 -ReadPump, WritePump..set
-	client.Room.ChanEnter <- client //Clinet 의 주소값을 넘긴다. 
+	client.Room.ChanEnter <- client                      //Clinet 의 주소값을 넘긴다.
 }
 
 // func (a *AppHandler) addPageHandler(w http.ResponseWriter, r *http.Request) {
@@ -284,10 +284,10 @@ func MakeHandler(dbConn string, ch *chan string, cRoom *client.ClientRoom) *AppH
 	})
 
 	a := &AppHandler{
-		Handler: c.Handler(mux),
-		db:      data.NewDBHandler(dbConn),
-		chdata:  ch,
-		id: 0,
+		Handler:    c.Handler(mux),
+		db:         data.NewDBHandler(dbConn),
+		chdata:     ch,
+		id:         0,
 		clientRoom: cRoom,
 	}
 

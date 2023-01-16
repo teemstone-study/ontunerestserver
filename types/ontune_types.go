@@ -35,3 +35,8 @@ type RealData struct {
 	Code uint32 `json:"code"`
 	Data string `json:"data"`
 }
+
+type RealPerpData struct {
+	Code uint32     `json:"code"`
+	Data [][]string `json:"data"`
+}

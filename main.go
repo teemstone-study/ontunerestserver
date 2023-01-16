@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,18 +21,18 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // 모든 CPU 사용
-	
+
 	var chend = make(chan string)
 	var ch = make(chan string)
 
 	clientRoom := client.NewClientRoom()
-	go clientRoom.Run()	
+	go clientRoom.Run()
 	// go clientRoom.HostLastQueue.DataProducer(types.HOST_CODE)
 	// go clientRoom.BasicQueue.DataProducer(types.BASIC_CODE)
 	// go clientRoom.IOQueue.DataProducer(types.NET_CODE)
 	go clientRoom.HostLastQueue.DataListen()
 	go clientRoom.RunDatapump()
-	
+
 	//var mapch = make(chan map[string]teemcache.CacheData)
 
 	//dbInfo := app.CreateDBInfo()
@@ -44,15 +45,14 @@ func main() {
 	mux := app.MakeHandler(env.GetDBConnString(), &ch, clientRoom)
 	defer mux.Close() //finally 개념
 
-	
-	//conn, err := net.Dial("tcp", "192.168.0.140:8088")	 	
-	conn, err := net.Dial("tcp", env.GetManagerConnString())	 	
+	//conn, err := net.Dial("tcp", "192.168.0.140:8088")
+	conn, err := net.Dial("tcp", env.GetManagerConnString())
 	if err != nil {
 		fmt.Println("Faield to Dial : ", err)
 	}
 	defer conn.Close()
-	go writeHandler(conn) 
-	go readHandler(conn, clientRoom.HostLastQueue) 
+	go writeHandler(conn)
+	go readHandler(conn, clientRoom.HostLastQueue)
 
 	ngri := negroni.Classic()
 	ngri.UseHandler(mux)
@@ -68,7 +68,7 @@ func writeHandler(conn net.Conn) {
 
 	dataKey := types.DataKey{}
 	dataKey.Code = types.DATAKEY_CODE
-	dataKey.Key = 254	
+	dataKey.Key = 254
 
 	send, err := json.Marshal(dataKey)
 	if err != nil {
@@ -79,7 +79,7 @@ func writeHandler(conn net.Conn) {
 		_, err := conn.Write([]byte(send))
 		if err != nil {
 			fmt.Println("Failed to write data : ", err)
-			break;
+			break
 		}
 		time.Sleep(6000 * time.Second)
 	}
@@ -97,10 +97,10 @@ func readHandler(conn net.Conn, dQ *data.DataQueue) {
 			return
 		}
 		if 0 < n {
-			fmt.Printf("header %d\n", header)
+			//fmt.Printf("header %d\n", header)
 
-			recv := make([]byte, header[0])
-		n, err = conn.Read(recv)
+			recv := make([]byte, binary.LittleEndian.Uint32(header))
+			n, err = conn.Read(recv)
 			if err != nil {
 				if io.EOF == err {
 					return
@@ -110,24 +110,35 @@ func readHandler(conn net.Conn, dQ *data.DataQueue) {
 			}
 			if 0 < n {
 				str_data := recv[:n]
-				fmt.Printf("%s\n", str_data)
-				// fmt.Println("---")				
+				//fmt.Printf("%s\n", str_data)
+				// fmt.Println("---")
 				//dQ.DataChan <- message
 				//fmt.Println(message)
-				databuf := types.RealData{}
-				err = json.Unmarshal(str_data, &databuf)
+				codeData := types.DataCode{}
+				err = json.Unmarshal(str_data, &codeData)
 				if err != nil {
-					log.Printf("error: %s", err)				
-					fmt.Println(str_data)
-					continue				
-				}	
-				// dQ.DataQueue.Push(message)		
-					fmt.Println("code: ", databuf.Code, " data: ", databuf.Data)
-					dQ.DataChan <- str_data					
+					continue
+				}
+				switch codeData.Code {
+				// case 2:
+				// 	databuf := types.RealData{}
+				// 	err = json.Unmarshal(str_data, &databuf)
+				// 	if err != nil {
+				// 		continue
+				// 	}
+				default:
+					databuf := types.RealPerpData{}
+					err = json.Unmarshal(str_data, &databuf)
+					if err != nil {
+						continue
+					}
+				}
+				// dQ.DataQueue.Push(message)
+				//fmt.Println("code: ", databuf.Code, " data: ", databuf.Data)
+				dQ.DataChan <- str_data
 			}
 		}
 
-		
 	}
 }
 
@@ -146,14 +157,13 @@ func readHandler(conn net.Conn, dQ *data.DataQueue) {
 // 		//fmt.Println(message)
 // 		err = json.Unmarshal(message, &databuf)
 // 		if err != nil {
-// 			log.Printf("error: %s", err)				
+// 			log.Printf("error: %s", err)
 // 			fmt.Println(message)
-// 			continue				
-// 		}	
+// 			continue
+// 		}
 
-// 		// dQ.DataQueue.Push(message)		
+// 		// dQ.DataQueue.Push(message)
 // 		fmt.Println("code: ", databuf.Code, " data: ", databuf.Data)
-// 		dQ.DataChan <- message		
+// 		dQ.DataChan <- message
 // 	}
 // }
-
