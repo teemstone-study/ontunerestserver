@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -45,101 +46,178 @@ func main() {
 	mux := app.MakeHandler(env.GetDBConnString(), &ch, clientRoom)
 	defer mux.Close() //finally 개념
 
-	//conn, err := net.Dial("tcp", "192.168.0.140:8088")
-	conn, err := net.Dial("tcp", env.GetManagerConnString())
-	if err != nil {
-		fmt.Println("Faield to Dial : ", err)
-	}
-	defer conn.Close()
-	go writeHandler(conn)
-	go readHandler(conn, clientRoom.HostLastQueue)
+	go TryConnectedTCP(env, clientRoom) //재연결을 위해 고루틴으로 변경
+	// conn, err := net.Dial("tcp", env.GetManagerConnString())
+	// if err != nil {
+	// 	fmt.Println("Faield to Dial : ", err)
+	// }
+	// defer conn.Close()
+	// go writeHandler(conn)
+	// go readHandler(conn, clientRoom.HostLastQueue)
 
 	ngri := negroni.Classic()
 	ngri.UseHandler(mux)
 
 	log.Println("Started App")
-	err = http.ListenAndServe(":"+env.GetWPort(), ngri)
+	err := http.ListenAndServe(":"+env.GetWPort(), ngri)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func writeHandler(conn net.Conn) {
-
-	dataKey := types.DataKey{}
-	dataKey.Code = types.DATAKEY_CODE
-	dataKey.Key = 254
-
-	send, err := json.Marshal(dataKey)
-	if err != nil {
-		log.Printf("error: %s", err)
-	}
-	//send := "Hello2"
+func TryConnectedTCP(env *app.DBInfo, clientRoom *client.ClientRoom) net.Conn {
+	var newconn net.Conn
+	var err error
+	var innerErrorChecker = make(chan bool, 1)
+	var changeValue = make(chan uint32, 1)
 	for {
-		_, err := conn.Write([]byte(send))
+		newconn, err = net.Dial("tcp", env.GetManagerConnString())
 		if err != nil {
-			fmt.Println("Failed to write data : ", err)
-			break
+			fmt.Println("Faield to Dial : ", err)
+			if newconn != nil {
+				newconn.Close()
+			}
+			time.Sleep(3 * time.Second)
+			fmt.Println("retry")
+			continue
+		} else {
+			changeValue <- uint32(254)
+			go ReadWriteHandler(newconn, clientRoom.HostLastQueue, changeValue, innerErrorChecker)
 		}
-		time.Sleep(6000 * time.Second)
+		time.Sleep(1 * time.Second)
+		<-innerErrorChecker //여기서 ReadWriteHandler 내부에 오류가 발생하면 연결 끊고 새로 진행되도록 처리
+		err = newconn.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("tcp Error Restart")
+
 	}
 }
 
-func readHandler(conn net.Conn, dQ *data.DataQueue) {
-	header := make([]byte, 4)
-	for {
-		n, err := conn.Read(header)
-		if err != nil {
-			if io.EOF == err {
-				return
-			}
-			log.Printf("Failed Connection: %v\n", err)
-			return
-		}
-		if 0 < n {
-			//fmt.Printf("header %d\n", header)
+// func writeHandler(conn net.Conn, errorChan chan bool) {
 
-			recv := make([]byte, binary.LittleEndian.Uint32(header))
-			n, err = conn.Read(recv)
+// 	dataKey := types.DataKey{}
+// 	dataKey.Code = types.DATAKEY_CODE
+// 	dataKey.Key = 254
+
+// 	send, err := json.Marshal(dataKey)
+// 	if err != nil {
+// 		log.Printf("error: %s", err)
+// 	}
+// 	for {
+// 		_, err := conn.Write([]byte(send))
+// 		if err != nil {
+// 			fmt.Println("Failed to write data : ", err)
+// 			break
+// 		} else {
+// 			fmt.Print("TCP Send data : ")
+// 			fmt.Println(dataKey)
+// 		}
+// 		time.Sleep(6 * time.Second)
+// 	}
+// 	errorChan <- true
+// 	fmt.Println("shutdown TCP Handller")
+// }
+
+func readBufferData(messageLength uint32, conn net.Conn) []byte {
+	Buffer := new(bytes.Buffer)
+	var recv []byte = make([]byte, 4096)
+	for messageLength > 0 {
+
+		n, err := conn.Read(recv)
+		if nil != err {
+			fmt.Println("err : " + err.Error())
+		}
+
+		if 0 < n {
+			data := recv[:n]
+			Buffer.Write(data)
+			messageLength -= uint32(n)
+		}
+	}
+	var response []byte
+	response = append(response, 0xFF)
+	_, err := conn.Write(response)
+	if err != nil {
+		fmt.Println("errorTCPSEND : " + err.Error())
+	}
+
+	strTest := Buffer.Bytes()
+	// err3 := json.Unmarshal([]byte(strTest), &realData)
+	// if err3 != nil {
+	// 	fmt.Println(err3)
+	// }
+	return strTest
+}
+
+// func readHandler(conn net.Conn, dQ *data.DataQueue, errorChan chan bool) {
+// 	var header = make([]byte, 4)
+// 	for {
+// 		n, err := conn.Read(header)
+// 		if err != nil {
+// 			if io.EOF == err {
+// 				break
+// 			}
+// 			log.Printf("Failed Connection: %v\n", err)
+// 			break
+// 		}
+// 		if 0 < n {
+// 			messageLength := binary.LittleEndian.Uint32(header)
+// 			realTimeData := readBufferData(messageLength, conn)
+// 			dQ.DataChan <- realTimeData
+// 		}
+// 		time.Sleep(100 * time.Millisecond)
+// 	}
+// 	errorChan <- true
+// }
+
+func ReadWriteHandler(conn net.Conn, dQ *data.DataQueue, changeValue chan uint32, errorChan chan bool) {
+	var header = make([]byte, 4)
+	forCheck := false
+	for !forCheck {
+		select {
+		case bindData := <-changeValue:
+			dataKey := types.DataKey{}
+			dataKey.Code = types.DATAKEY_CODE
+			dataKey.Key = types.Bitmask(bindData)
+
+			send, err := json.Marshal(dataKey)
+			if err != nil {
+				log.Printf("error: %s", err)
+			}
+			//send := "Hello2"
+			_, err = conn.Write([]byte(send))
+			if err != nil {
+				fmt.Println("Failed to write data : ", err)
+				forCheck = true
+				break
+			} else {
+				fmt.Print("TCP Send data : ")
+				fmt.Println(dataKey)
+			}
+
+			break
+		default:
+			n, err := conn.Read(header)
 			if err != nil {
 				if io.EOF == err {
-					return
+					break
 				}
 				log.Printf("Failed Connection: %v\n", err)
-				return
+				forCheck = true
+				break
 			}
 			if 0 < n {
-				str_data := recv[:n]
-				//fmt.Printf("%s\n", str_data)
-				// fmt.Println("---")
-				//dQ.DataChan <- message
-				//fmt.Println(message)
-				codeData := types.DataCode{}
-				err = json.Unmarshal(str_data, &codeData)
-				if err != nil {
-					continue
-				}
-				switch codeData.Code {
-				// case 2:
-				// 	databuf := types.RealData{}
-				// 	err = json.Unmarshal(str_data, &databuf)
-				// 	if err != nil {
-				// 		continue
-				// 	}
-				default:
-					databuf := types.RealPerpData{}
-					err = json.Unmarshal(str_data, &databuf)
-					if err != nil {
-						continue
-					}
-				}
-				// dQ.DataQueue.Push(message)
-				//fmt.Println("code: ", databuf.Code, " data: ", databuf.Data)
-				dQ.DataChan <- str_data
+				messageLength := binary.LittleEndian.Uint32(header)
+				realTimeData := readBufferData(messageLength, conn)
+				dQ.DataChan <- realTimeData
 			}
+			time.Sleep(100 * time.Millisecond)
+			break
 		}
-
 	}
+	errorChan <- true
 }
 
 // func readHandler(conn net.Conn, dQ *data.DataQueue) {

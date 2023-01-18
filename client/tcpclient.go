@@ -26,7 +26,7 @@ func writeHandler(conn net.Conn) {
 
 	dataKey := types.DataKey{}
 	dataKey.Code = types.DATAKEY_CODE
-	dataKey.Key = 254	
+	dataKey.Key = 254
 
 	send, err := json.Marshal(dataKey)
 	if err != nil {
@@ -37,7 +37,7 @@ func writeHandler(conn net.Conn) {
 		_, err := conn.Write([]byte(send))
 		if err != nil {
 			fmt.Println("Failed to write data : ", err)
-			break;
+			break
 		}
 		time.Sleep(6000 * time.Second)
 	}
@@ -58,25 +58,23 @@ func readHandler(conn net.Conn) {
 		// fmt.Println(message)
 		err = json.Unmarshal(message, &databuf)
 		if err != nil {
-			log.Printf("error: %s", err)				
-			continue				
+			log.Printf("error: %s", err)
+			continue
 		}
 		fmt.Println("code: ", databuf.Code, " data: ", databuf.Data)
 	}
 }
 
-
 func RunClient() {
 	//conn, err := net.Dial("tcp", "192.168.0.58:8088")
-	conn, err := net.Dial("tcp", "192.168.0.140:8088")	 
+	conn, err := net.Dial("tcp", "192.168.0.140:8088")
 	if err != nil {
 		fmt.Println("Faield to Dial : ", err)
 	}
 	defer conn.Close()
 
-	//go writeHandler(conn) 
-	go readHandler(conn) 
-
+	//go writeHandler(conn)
+	go readHandler(conn)
 
 	// var (
 	//     codecBuffer bytes.Buffer
