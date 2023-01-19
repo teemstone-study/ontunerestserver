@@ -84,14 +84,12 @@ func TryConnectedTCP(env *app.DBInfo, clientRoom *client.ClientRoom) net.Conn {
 			changeValue <- uint32(254)
 			go ReadWriteHandler(newconn, clientRoom.HostLastQueue, changeValue, innerErrorChecker)
 		}
-		time.Sleep(1 * time.Second)
 		<-innerErrorChecker //여기서 ReadWriteHandler 내부에 오류가 발생하면 연결 끊고 새로 진행되도록 처리
 		err = newconn.Close()
 		if err != nil {
 			fmt.Println(err)
 		}
 		fmt.Println("tcp Error Restart")
-
 	}
 }
 
@@ -174,8 +172,12 @@ func readBufferData(messageLength uint32, conn net.Conn) []byte {
 
 func ReadWriteHandler(conn net.Conn, dQ *data.DataQueue, changeValue chan uint32, errorChan chan bool) {
 	var header = make([]byte, 4)
-	forCheck := false
-	for !forCheck {
+	defer func() {
+		recover()
+		errorChan <- true
+	}()
+
+	for {
 		select {
 		case bindData := <-changeValue:
 			dataKey := types.DataKey{}
@@ -190,8 +192,7 @@ func ReadWriteHandler(conn net.Conn, dQ *data.DataQueue, changeValue chan uint32
 			_, err = conn.Write([]byte(send))
 			if err != nil {
 				fmt.Println("Failed to write data : ", err)
-				forCheck = true
-				break
+				panic(err)
 			} else {
 				fmt.Print("TCP Send data : ")
 				fmt.Println(dataKey)
@@ -205,8 +206,7 @@ func ReadWriteHandler(conn net.Conn, dQ *data.DataQueue, changeValue chan uint32
 					break
 				}
 				log.Printf("Failed Connection: %v\n", err)
-				forCheck = true
-				break
+				panic(err)
 			}
 			if 0 < n {
 				messageLength := binary.LittleEndian.Uint32(header)
@@ -217,7 +217,6 @@ func ReadWriteHandler(conn net.Conn, dQ *data.DataQueue, changeValue chan uint32
 			break
 		}
 	}
-	errorChan <- true
 }
 
 // func readHandler(conn net.Conn, dQ *data.DataQueue) {
